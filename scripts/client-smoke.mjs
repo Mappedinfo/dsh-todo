@@ -92,8 +92,9 @@ check('factory 返回一个注入 slots/locale/connection 的插件', () => {
 // ── 桩 Client 上下文：记录注册与清理 ────────────────────────────────────
 const registrations = []
 let localeDict = null
-const disposed = { locale: false, icon: false, panel: false }
+const disposed = { locale: false, icon: false, panel: false, strip: false }
 
+const selectedPanels = []
 const effectDisposers = []
 const ctx = {
   effect(factory, label) {
@@ -121,7 +122,7 @@ const ctx = {
     inject(name, callback) {
       const from = registrations.length
       callback()
-      const slot = name === 'main' ? 'panel' : 'icon'
+      const slot = name === 'main' ? 'panel' : name === 'sidebar.panellist' ? 'icon' : 'strip'
       return () => {
         disposed[slot] = true
         for (const entry of registrations.slice(from)) entry.dispose()
@@ -134,6 +135,10 @@ const ctx = {
     },
   },
   connection: { rpc: { call: async () => ({ ok: true, value: {} }) } },
+  // 宿主提供的可选服务；插件必须能接受它不存在。
+  get(name) {
+    return name === 'layout' ? { selectPanel(panelId) { selectedPanels.push(panelId) } } : undefined
+  },
 }
 
 const stylesBuiltin = { insert(css) { styles.push(css); return () => { disposed.styles = true } } }
@@ -143,7 +148,7 @@ check('apply 在只有 require 的 bundle 环境里注册两个槽位', () => {
   // 插件 bundle 的 factory 只拿到 require，任何对 builtin 的引用都会在这里炸掉。
   globalThis.__plugin.apply(ctx)
   const names = registrations.map((entry) => `${entry.options.name}:${entry.options.id ?? entry.options.key}`)
-  assert.deepEqual(names.sort(), ['main:todo', 'sidebar.panellist:todo'])
+  assert.deepEqual(names.sort(), ['conversation.composer.dock:todo-strip', 'main:todo', 'sidebar.panellist:todo'])
 })
 
 check('侧栏图标带 order 与本地化 label thunk', () => {
@@ -292,10 +297,52 @@ check('切到 Markdown 视图能渲染任务项复选框，再切源码模式出
   assert.ok(source.types.includes('textarea'), '源码模式没有渲染文本域')
 })
 
+check('面板左上角的返回按钮会调用 selectPanel(null)', () => {
+  const panel = registrations.find((entry) => entry.options.name === 'main')
+  hookState.clear()
+  hookIndex = 0
+  hookState.set('s0', { todos: [], prefs: { view: 'list', filter: 'all' }, counts: { total: 0, open: 0, done: 0, today: 0, due: 0 } })
+  hookState.set('s1', '')
+  const nodes = collectNodes(renderNode(panel.component({})))
+  const back = nodes.find((node) => node && node.type === 'button' && node.props?.className === 'dsh-todo__back')
+  assert.ok(back !== undefined, '找不到返回按钮')
+  assert.equal(back.props.title, '返回对话')
+  back.props.onClick()
+  assert.deepEqual(selectedPanels, [null], '应当请求回到对话（selectPanel(null)）')
+})
+
+check('输入框下方的待办条显示计数，点击打开面板', () => {
+  const strip = registrations.find((entry) => entry.options.name === 'conversation.composer.dock')
+  assert.ok(strip !== undefined, '没有注册待办条')
+  assert.equal(strip.options.id, 'todo-strip')
+  hookState.clear()
+  hookIndex = 0
+  hookState.set('s0', { total: 3, open: 2, today: 1, done: 1, due: 0 })
+  hookState.set('s1', [{ id: 'a1', title: '写周报', done: false }])
+  selectedPanels.length = 0
+  const nodes = collectNodes(renderNode(strip.component({})))
+  const texts = nodes.filter((node) => typeof node === 'string')
+  assert.ok(texts.includes('待办 2'), '没有渲染未完成计数')
+  assert.ok(texts.includes('今日 1'), '没有渲染今日计数')
+  assert.ok(texts.includes('写周报'), '没有渲染待办标题')
+  const open = nodes.find((node) => node && node.type === 'button' && node.props?.className === 'dsh-todo-strip__count')
+  open.props.onClick()
+  assert.deepEqual(selectedPanels, ['todo'], '应当切到 todo 面板')
+})
+
+check('清单为空时不渲染待办条', () => {
+  const strip = registrations.find((entry) => entry.options.name === 'conversation.composer.dock')
+  hookState.clear()
+  hookIndex = 0
+  hookState.set('s0', { total: 0, open: 0, today: 0, done: 0, due: 0 })
+  hookState.set('s1', [])
+  assert.equal(renderNode(strip.component({})), null)
+})
+
 check('卸载会清掉语言包与两个槽位注册', () => {
   assert.equal(effectDisposers.length, 1, 'apply 应当只开一个 effect')
   for (const dispose of effectDisposers) dispose()
-  assert.deepEqual(disposed, { locale: true, icon: true, panel: true })
+  assert.deepEqual(disposed, { locale: true, icon: true, panel: true, strip: true })
   assert.equal(registrations.length, 0)
 })
 

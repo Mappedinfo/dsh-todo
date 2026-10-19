@@ -66,6 +66,10 @@ window.__ModuleLoader__.load({
       failed: '待办面板载入失败',
       createdSummary: '共 {total} · 未完成 {open} · 今日到期 {today}',
       dueNotice: '{count} 项到达提醒时间',
+      backToChat: '返回对话',
+      stripOpen: '待办 {open}',
+      stripToday: '今日 {today}',
+      stripDone: '已完成 {done}',
     }
     const EN = {
       panel: 'Todo List',
@@ -117,6 +121,10 @@ window.__ModuleLoader__.load({
       failed: 'Could not load the todo board',
       createdSummary: '{total} total · {open} open · {today} due today',
       dueNotice: '{count} task(s) reached their reminder time',
+      backToChat: 'Back to chat',
+      stripOpen: '{open} open',
+      stripToday: '{today} today',
+      stripDone: '{done} done',
     }
 
     // ── RPC ────────────────────────────────────────────────────────────────
@@ -616,8 +624,55 @@ window.__ModuleLoader__.load({
           }))
     }
 
+    /**
+     * 对话输入框下方的待办条：在 start 页面与任何会话里都能看到。
+     * 只显示计数与最近两项，点一下打开完整面板。
+     */
+    function TodoStrip({ api, t, layout }) {
+      const [counts, setCounts] = useState(null)
+      const [top, setTop] = useState([])
+
+      useEffect(() => {
+        let stopped = false
+        const load = () => {
+          api.snapshot()
+            .then((next) => {
+              if (stopped) return
+              setCounts(next.counts)
+              setTop(next.todos.filter((todo) => !todo.done).slice(0, 2))
+            })
+            .catch(() => undefined)
+        }
+        load()
+        const timer = setInterval(load, 60_000)
+        return () => {
+          stopped = true
+          clearInterval(timer)
+        }
+      }, [api])
+
+      if (counts === null || counts.total === 0) return null
+
+      const open = () => {
+        if (typeof layout?.selectPanel === 'function') layout.selectPanel('todo')
+      }
+      return h('div', { className: 'dsh-todo-strip' },
+        h('button', { type: 'button', className: 'dsh-todo-strip__count', onClick: open },
+          h(TodoIcon, { size: 14 }),
+          h('span', {}, t('stripOpen', { open: counts.open })),
+          counts.today > 0 ? h('span', { className: 'dsh-todo-strip__sep' }, '·') : null,
+          counts.today > 0 ? h('span', { className: 'dsh-todo-strip__today' }, t('stripToday', { today: counts.today })) : null),
+        top.map((todo) => h('button', {
+          key: todo.id,
+          type: 'button',
+          className: 'dsh-todo-strip__item',
+          title: todo.title,
+          onClick: open,
+        }, todo.title)))
+    }
+
     // ── 面板 ────────────────────────────────────────────────────────────────
-    function TodoPanel({ api, t }) {
+    function TodoPanel({ api, t, layout }) {
       const [data, setData] = useState(null)
       const [markdown, setMarkdown] = useState('')
       const [error, setError] = useState(null)
@@ -706,10 +761,20 @@ window.__ModuleLoader__.load({
           h('div', { className: 'dsh-todo__banner is-error' }, error ?? t('loading')))
       }
 
+      // selectPanel(null) 是宿主提供的「回到对话」语义，不需要猜上一个面板 id。
+      const canReturn = typeof layout?.selectPanel === 'function'
       return h('div', { className: 'dsh-todo' },
         h(Stylesheet),
         h('header', { className: 'dsh-todo__bar' },
           h('div', { className: 'dsh-todo__heading' },
+            canReturn
+              ? h('button', {
+                type: 'button',
+                className: 'dsh-todo__back',
+                title: t('backToChat'),
+                onClick: () => layout.selectPanel(null),
+              }, '←', h('span', { className: 'dsh-todo__back-label' }, t('backToChat')))
+              : null,
             h(TodoIcon, { size: 18 }),
             h('span', { className: 'dsh-todo__title' }, t('panel')),
             h('span', { className: 'dsh-todo__summary' }, t('createdSummary', {
@@ -800,6 +865,15 @@ window.__ModuleLoader__.load({
 .dsh-todo__md-check.is-done{background:var(--dsw-alias-state-success-primary);border-color:var(--dsw-alias-state-success-primary);}
 .dsh-todo__md-code{background:var(--dsw-alias-bg-layer-2);border-radius:8px;padding:10px 12px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;}
 .dsh-todo__md-hr{border:0;border-top:1px solid var(--dsw-alias-border-l1);margin:12px 0;}
+.dsh-todo__back{display:inline-flex;align-items:center;gap:4px;font:inherit;font-size:12px;color:var(--dsw-alias-label-secondary);background:transparent;border:1px solid var(--dsw-alias-border-l1);border-radius:6px;padding:3px 8px;cursor:pointer;}
+.dsh-todo__back:hover{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l2);}
+.dsh-todo-strip{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:2px 4px;font-size:12px;color:var(--dsw-alias-label-secondary);}
+.dsh-todo-strip__count{display:inline-flex;align-items:center;gap:4px;font:inherit;font-size:12px;color:var(--dsw-alias-label-secondary);background:transparent;border:0;padding:0;cursor:pointer;}
+.dsh-todo-strip__count:hover{color:var(--dsw-alias-label-primary);}
+.dsh-todo-strip__today{color:var(--dsw-alias-state-warn-primary);}
+.dsh-todo-strip__sep{opacity:.6;}
+.dsh-todo-strip__item{font:inherit;font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-secondary);background:transparent;border:1px solid var(--dsw-alias-border-l1);border-radius:999px;padding:1px 8px;cursor:pointer;}
+.dsh-todo-strip__item:hover{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l2);}
 `
 
     /** 随面板挂载的样式表；面板卸载时由 React 一并移除。 */
@@ -818,6 +892,8 @@ window.__ModuleLoader__.load({
             return snapshot?.id ?? snapshot?.locale ?? ''
           }
           const api = createApi(ctx.connection.rpc, getLocale)
+          // layout 是可选依赖：拿不到时按钮与跳转自动隐藏，插件其余部分照常工作。
+          const layout = ctx.get?.('layout')
 
           // 样式表不通过任何 builtin 注入：插件 bundle 的 factory 只拿到 require，
           // `styles` 是动态 Client runner 的 builtin，在这里并不存在。
@@ -837,10 +913,20 @@ window.__ModuleLoader__.load({
             name: 'main',
             key: 'todo',
           }, function TodoMainPanel() {
-            return h(TodoPanel, { api, t })
+            return h(TodoPanel, { api, t, layout })
+          }))
+
+          // 输入框下方的待办条：start 页面与进行中的会话都能看到。
+          const stopStrip = ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
+            name: 'conversation.composer.dock',
+            id: 'todo-strip',
+            order: 2,
+          }, function TodoStripSlot() {
+            return h(TodoStrip, { api, t, layout })
           }))
 
           return () => {
+            stopStrip()
             stopPanel()
             stopIcon()
             stopLocale()

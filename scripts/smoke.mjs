@@ -56,6 +56,35 @@ try {
     assert.equal(formatDateTime(nextReminderAt(todo, new Date())), '2026-10-20 17:30')
   })
 
+  await check('每种模式只保留自己需要的提醒字段', () => {
+    const once = store.create({ title: 'a', mode: 'once' })
+    assert.ok(once.reminder.at !== null, 'once 需要 at')
+    assert.equal(once.reminder.time, null, 'once 不该有每日时刻')
+
+    const daily = store.create({ title: 'b', mode: 'daily', remindTime: '21:00' })
+    assert.equal(daily.reminder.at, null, 'daily 不该留 at 死字段')
+    assert.equal(daily.reminder.time, '21:00')
+
+    const lead = store.create({ title: 'c', mode: 'lead', due: '2026-10-20T18:00' })
+    assert.equal(lead.reminder.at, null, 'lead 不该留 at 死字段')
+    assert.ok(lead.dueAt !== null, 'lead 需要截止时间')
+    assert.equal(lead.reminder.time, null, 'lead 不该有每日时刻')
+
+    const none = store.create({ title: 'd', mode: 'none' })
+    assert.equal(none.reminder.at, null)
+    assert.equal(none.reminder.time, null)
+  })
+
+  await check('切到 daily 会清掉 once 留下的 at，切回 once 重新计算', () => {
+    const todo = store.create({ title: '来回切', mode: 'once' })
+    const original = todo.reminder.at
+    const daily = store.update(todo.id, { reminder: { mode: 'daily', time: '08:00' } })
+    assert.equal(daily.reminder.at, null, 'daily 不该沿用 once 的 at')
+    const back = store.update(todo.id, { reminder: { mode: 'once' } })
+    assert.ok(back.reminder.at !== null, '切回 once 应重新给一个时刻')
+    assert.equal(back.reminder.time, null, 'once 不该保留每日时刻')
+  })
+
   await check('none 模式没有提醒', () => {
     const todo = store.create({ title: '读书', mode: 'none' })
     assert.equal(nextReminderAt(todo, new Date()), null)
@@ -72,6 +101,14 @@ try {
     const todo = store.create({ title: '改模式2', mode: 'none' })
     const updated = store.update(todo.id, { reminder: { mode: 'daily' } })
     assert.equal(updated.reminder.time, '09:00')
+    assert.equal(updated.reminder.at, null)
+  })
+
+  await check('切到 lead 但没有截止时间时会补一个，否则永远不触发', () => {
+    const todo = store.create({ title: '改模式3', mode: 'none' })
+    const updated = store.update(todo.id, { reminder: { mode: 'lead', leadMinutes: 15 } })
+    assert.ok(updated.dueAt !== null, 'lead 必须有一个截止时间兜底')
+    assert.ok(nextReminderAt(updated, new Date()) !== null, '应当有下次提醒')
   })
 
   console.log('完成状态与提醒扫描')

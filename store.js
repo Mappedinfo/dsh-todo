@@ -298,19 +298,29 @@ export class TodoStore {
       this.defaults.leadMinutes,
     )
     const dailyTime = parseLocalTime(input.remindTime ?? this.defaults.reminderTime)
-
-    // 默认提醒时刻：once / lead 用「现在 + 默认提前量」，daily 用每日时刻。
-    let at = parseLocalDateTime(input.remindAt ?? input.remindAtLocal)
-    if (mode === 'once' || mode === 'lead') {
-      if (at === null) {
-        at = new Date(now.getTime() + this.defaults.reminderDelayMinutes * 60_000)
-        if (this.defaults.reminderGranularityMinutes > 0) {
-          at = ceilToGranularity(at, this.defaults.reminderGranularityMinutes)
-        }
-      }
+    /** 默认提醒时刻：现在 + 默认提前量，向上取整到配置的刻度。 */
+    const defaultAt = () => {
+      const base = new Date(now.getTime() + this.defaults.reminderDelayMinutes * 60_000)
+      return this.defaults.reminderGranularityMinutes > 0
+        ? ceilToGranularity(base, this.defaults.reminderGranularityMinutes)
+        : base
     }
 
-    const parsedDue = parseLocalDateTime(input.due ?? input.dueLocal)
+    // 每个模式只保留自己需要的字段：
+    // once 用 at；daily 用 time；lead 用 dueAt 减提前量；none 都不用。
+    // 留下不属于该模式的字段会变成死数据，切回 once 时还会被误当成旧时间复用。
+    let at = parseLocalDateTime(input.remindAt ?? input.remindAtLocal)
+    let due = parseLocalDateTime(input.due ?? input.dueLocal)
+    if (mode === 'once') {
+      if (at === null) at = defaultAt()
+      if (due === null) due = at
+    } else if (mode === 'lead') {
+      at = null
+      if (due === null) due = defaultAt()
+    } else {
+      at = null
+    }
+
     const todo = {
       id: newId(now),
       title,
@@ -319,10 +329,7 @@ export class TodoStore {
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
       completedAt: input.done === true ? now.toISOString() : null,
-      // lead 模式下截止时间与提醒时刻同源；否则沿用调用方给出的截止时间。
-      dueAt: parsedDue !== null
-        ? parsedDue.toISOString()
-        : (mode === 'lead' || mode === 'once') && at !== null ? at.toISOString() : null,
+      dueAt: due === null ? null : due.toISOString(),
       reminder: {
         mode,
         at: at === null ? null : at.toISOString(),
@@ -373,6 +380,7 @@ export class TodoStore {
     if (patch.reminder !== undefined && patch.reminder !== null && typeof patch.reminder === 'object') {
       const reminder = patch.reminder
       const nextMode = oneOf(reminder.mode, REMINDER_MODES, todo.reminder.mode)
+      const previousMode = todo.reminder.mode
       todo.reminder = {
         mode: nextMode,
         at: todo.reminder.at,
@@ -396,14 +404,26 @@ export class TodoStore {
           todo.reminder.at = parsed.toISOString()
         }
       }
-      if (nextMode !== 'none' && nextMode !== 'lead' && todo.reminder.at === null) {
+      // 只有 once 用 at；切到其他模式时清掉，避免死字段在切回 once 时被当成旧时间复用。
+      if (nextMode === 'once') {
+        if (todo.reminder.at === null) {
+          const fallback = new Date(Date.now() + this.defaults.reminderDelayMinutes * 60_000)
+          todo.reminder.at = (this.defaults.reminderGranularityMinutes > 0
+            ? ceilToGranularity(fallback, this.defaults.reminderGranularityMinutes)
+            : fallback).toISOString()
+        }
+      } else {
+        todo.reminder.at = null
+      }
+      if (nextMode !== 'daily') todo.reminder.time = null
+      // lead 需要截止时间才提醒得到；没有就补一个，否则该条目永远不会触发。
+      if (nextMode === 'lead' && todo.dueAt === null) {
         const fallback = new Date(Date.now() + this.defaults.reminderDelayMinutes * 60_000)
-        todo.reminder.at = (this.defaults.reminderGranularityMinutes > 0
+        todo.dueAt = (this.defaults.reminderGranularityMinutes > 0
           ? ceilToGranularity(fallback, this.defaults.reminderGranularityMinutes)
           : fallback).toISOString()
       }
-      if (todo.reminder.mode !== nextMode) todo.remindedAt = null
-      todo.reminder.mode = nextMode
+      if (previousMode !== nextMode) todo.remindedAt = null
     }
     todo.updatedAt = new Date().toISOString()
     this.schedule()
