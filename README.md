@@ -4,6 +4,24 @@ DeepSeek Harness 插件：在侧栏加一个**待办清单**面板，支持**列
 
 面板、agent 工具和 Markdown 视图共用同一份 Host 端数据与同一组服务方法，不存在两套逻辑。
 
+社区介绍与讨论见 [DSH Show Your Plugins!](https://github.com/deepseek-ai/deepseek-harness/discussions/10226)。本项目为**非官方**社区插件，独立维护，未经 DeepSeek 官方审核。
+
+## 安装
+
+```sh
+# 从 GitHub 安装（当前可用）
+dsh plugin --profile <你的 profile> add github:Mappedinfo/dsh-todo
+
+# npm 包发布后
+dsh plugin --profile <你的 profile> add @mappedinfo/dsh-todo
+```
+
+也可以在 DSH 的插件页用 Add 填入同一个地址。`<你的 profile>` 是 profile 名（例如 `web`）；Electron 桌面版的 `desktop` profile 由应用自身管理。
+
+装完侧栏出现待办图标。数据落在 `~/.dsh/dsh-todo/state.json`，用 `stateFile` 配置项可改路径。
+
+`@deepseek-ai/dsh-tools` 是唯一的运行期依赖，用来注册 `todo_board` 工具；它取不到时插件照常提供面板与 RPC，只记一条 warn 日志。
+
 ---
 
 ## 界面
@@ -102,20 +120,26 @@ node --check client.js          # 浏览器半边的语法
 
 `client-smoke.mjs` 会执行 bundle 的 `factory` 与 `apply`，断言两个槽位注册（`sidebar.panellist:todo` / `main:todo`）、zh/en 语言包、样式只用主题令牌、列表视图与 Markdown 预览 / 源码两种模式各自渲染出什么，以及卸载时全部清理干净。
 
-## 安装
+## 从源码开发
 
-`node_modules/@deepseek-ai/dsh-tools` 是指向本地 DSH 源码检出的**软链接**（与同目录的 `dsh-paper-library` 同一做法）：
+插件没有构建步骤，克隆后直接链接进 profile 即可：
+
+```bash
+git clone https://github.com/Mappedinfo/dsh-todo.git
+cd dsh-todo
+dsh plugin --profile <你的 profile> add "$PWD"
+```
+
+本地开发时 `@deepseek-ai/dsh-tools` 可能不在解析路径里（它随 DSH 安装或源码检出提供）。可以指向本地 DSH 源码检出：
 
 ```bash
 mkdir -p node_modules/@deepseek-ai
 ln -sfn <dsh 源码检出>/packages/core/tools node_modules/@deepseek-ai/dsh-tools
 ```
 
-它只影响可选的 `todo_board` 工具：取不到时插件照常提供面板与 RPC，只记一条 warn 日志。
+不建这个链接也只会失去 `todo_board` 工具，面板与 RPC 不受影响。`node_modules/` 已被 `.gitignore` 排除。
 
-```bash
-dsh plugin --profile <profile> add "$PWD"
-```
+从 npm 或 GitHub 正常安装时，这个依赖由包管理器装上，不需要手工链接。
 
 装好后侧栏即出现待办图标。页面通过模块图热更新拿到新的浏览器模块，通常不必刷新；若图标没出现，刷新一次即可。
 
