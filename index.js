@@ -86,7 +86,7 @@ export function apply(ctx, rawConfig = {}) {
       let defineTool = null
       try {
         ({ defineTool } = await import('@deepseek-ai/dsh-tools'))
-      } catch {
+      } catch (error) {
         ctx.logger.warn('dsh-todo: @deepseek-ai/dsh-tools 不可解析，本次不注册 todo_board 工具（面板与 RPC 不受影响）')
       }
       if (defineTool !== null) {
