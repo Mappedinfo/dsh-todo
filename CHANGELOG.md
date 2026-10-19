@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- **New Session 行加入待办入口**：注册 `conversation.hero.options`（官方留给插件放紧凑选项的位置，和 workspace / preset 控件同一排），显示 `待办 N · 今日 M`，点一下打开面板。宿主自带的「Workspace files / New terminal / Browser」是内置的、不走槽位，所以插件只能落在这个专门座位里。
+- 待办条与 hero 按钮自带 `CORE_CSS`，不依赖面板先被打开，避免未打开面板时它们是裸样式。
+
 ## 0.1.2
 
 - **切到待办面板后能一键回到对话**：面板左上角新增「← 返回对话」，调用 `ctx.layout.selectPanel(null)`（宿主定义的「显示对话」语义），不需要猜上一个面板 id。

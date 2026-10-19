@@ -32,6 +32,12 @@ dsh plugin --profile <你的 profile> add github:Mappedinfo/dsh-todo
 
 面板左上角有「← 返回对话」。点侧栏待办图标会切走当前会话，这个按钮直接把你送回对话，接着干活。
 
+### New Session 行的待办入口
+
+新建会话那一行的右侧（workspace / preset 控件之后）会有一个 `待办 N · 今日 M` 的紧凑按钮，点一下打开完整面板。
+
+> 宿主的「Workspace files / New terminal / Browser」三个快捷操作是内置组件，不经槽位；插件能用的位置是 `conversation.hero.options`，也就是这一行里留给插件的座位。
+
 ### 输入框下方的待办条
 
 对话或 start 页面的输入框下方会有一条待办摘要：未完成数、今日到期数，以及最近两项未完成条目。点一下打开完整面板。清单为空时不显示。

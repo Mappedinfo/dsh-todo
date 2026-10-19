@@ -92,7 +92,7 @@ check('factory 返回一个注入 slots/locale/connection 的插件', () => {
 // ── 桩 Client 上下文：记录注册与清理 ────────────────────────────────────
 const registrations = []
 let localeDict = null
-const disposed = { locale: false, icon: false, panel: false, strip: false }
+const disposed = { locale: false, icon: false, panel: false, strip: false, hero: false }
 
 const selectedPanels = []
 const effectDisposers = []
@@ -122,7 +122,9 @@ const ctx = {
     inject(name, callback) {
       const from = registrations.length
       callback()
-      const slot = name === 'main' ? 'panel' : name === 'sidebar.panellist' ? 'icon' : 'strip'
+      const slot = name === 'main' ? 'panel'
+        : name === 'sidebar.panellist' ? 'icon'
+          : name === 'conversation.hero.options' ? 'hero' : 'strip'
       return () => {
         disposed[slot] = true
         for (const entry of registrations.slice(from)) entry.dispose()
@@ -148,7 +150,12 @@ check('apply 在只有 require 的 bundle 环境里注册两个槽位', () => {
   // 插件 bundle 的 factory 只拿到 require，任何对 builtin 的引用都会在这里炸掉。
   globalThis.__plugin.apply(ctx)
   const names = registrations.map((entry) => `${entry.options.name}:${entry.options.id ?? entry.options.key}`)
-  assert.deepEqual(names.sort(), ['conversation.composer.dock:todo-strip', 'main:todo', 'sidebar.panellist:todo'])
+  assert.deepEqual(names.sort(), [
+    'conversation.composer.dock:todo-strip',
+    'conversation.hero.options:todo',
+    'main:todo',
+    'sidebar.panellist:todo',
+  ])
 })
 
 check('侧栏图标带 order 与本地化 label thunk', () => {
@@ -339,10 +346,27 @@ check('清单为空时不渲染待办条', () => {
   assert.equal(renderNode(strip.component({})), null)
 })
 
+check('New Session 行的待办选项显示计数并打开面板', () => {
+  const hero = registrations.find((entry) => entry.options.name === 'conversation.hero.options')
+  assert.ok(hero !== undefined, '没有注册 hero 选项')
+  assert.equal(hero.options.id, 'todo')
+  hookState.clear()
+  hookIndex = 0
+  hookState.set('s0', { total: 4, open: 3, today: 2, done: 1, due: 0 })
+  selectedPanels.length = 0
+  const nodes = collectNodes(renderNode(hero.component({})))
+  const texts = nodes.filter((node) => typeof node === 'string')
+  assert.ok(texts.includes('待办 3'), '没有渲染未完成计数')
+  assert.ok(texts.includes('今日 2'), '没有渲染今日计数')
+  const button = nodes.find((node) => node && node.type === 'button')
+  button.props.onClick()
+  assert.deepEqual(selectedPanels, ['todo'])
+})
+
 check('卸载会清掉语言包与两个槽位注册', () => {
   assert.equal(effectDisposers.length, 1, 'apply 应当只开一个 effect')
   for (const dispose of effectDisposers) dispose()
-  assert.deepEqual(disposed, { locale: true, icon: true, panel: true, strip: true })
+  assert.deepEqual(disposed, { locale: true, icon: true, panel: true, strip: true, hero: true })
   assert.equal(registrations.length, 0)
 })
 

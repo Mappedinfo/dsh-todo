@@ -657,6 +657,7 @@ window.__ModuleLoader__.load({
         if (typeof layout?.selectPanel === 'function') layout.selectPanel('todo')
       }
       return h('div', { className: 'dsh-todo-strip' },
+        h(CoreStyles),
         h('button', { type: 'button', className: 'dsh-todo-strip__count', onClick: open },
           h(TodoIcon, { size: 14 }),
           h('span', {}, t('stripOpen', { open: counts.open })),
@@ -669,6 +670,46 @@ window.__ModuleLoader__.load({
           title: todo.title,
           onClick: open,
         }, todo.title)))
+    }
+
+    /**
+     * New Session 行里的紧凑选项：和 Workspace files / New terminal / Browser 同一块区域。
+     * 宿主自带的三个快捷操作是内置的，不走槽位；这里是官方留给插件的位置。
+     */
+    function TodoHeroOption({ api, t, layout }) {
+      const [counts, setCounts] = useState(null)
+
+      useEffect(() => {
+        let stopped = false
+        const load = () => {
+          api.snapshot()
+            .then((next) => { if (!stopped) setCounts(next.counts) })
+            .catch(() => undefined)
+        }
+        load()
+        const timer = setInterval(load, 60_000)
+        return () => {
+          stopped = true
+          clearInterval(timer)
+        }
+      }, [api])
+
+      if (counts === null || counts.total === 0) return null
+      const open = () => {
+        if (typeof layout?.selectPanel === 'function') layout.selectPanel('todo')
+      }
+      return h(React.Fragment, null,
+        h(CoreStyles),
+        h('button', {
+          type: 'button',
+          className: 'dsh-todo-strip__count',
+          title: t('panel'),
+          onClick: open,
+        },
+        h(TodoIcon, { size: 14 }),
+        h('span', {}, t('stripOpen', { open: counts.open })),
+        counts.today > 0 ? h('span', { className: 'dsh-todo-strip__sep' }, '·') : null,
+        counts.today > 0 ? h('span', { className: 'dsh-todo-strip__today' }, t('stripToday', { today: counts.today })) : null))
     }
 
     // ── 面板 ────────────────────────────────────────────────────────────────
@@ -867,6 +908,10 @@ window.__ModuleLoader__.load({
 .dsh-todo__md-hr{border:0;border-top:1px solid var(--dsw-alias-border-l1);margin:12px 0;}
 .dsh-todo__back{display:inline-flex;align-items:center;gap:4px;font:inherit;font-size:12px;color:var(--dsw-alias-label-secondary);background:transparent;border:1px solid var(--dsw-alias-border-l1);border-radius:6px;padding:3px 8px;cursor:pointer;}
 .dsh-todo__back:hover{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l2);}
+`
+
+    /** 待办条与 hero 按钮的样式：它们可能不伴随面板出现，需要自带。 */
+    const CORE_CSS = `
 .dsh-todo-strip{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:2px 4px;font-size:12px;color:var(--dsw-alias-label-secondary);}
 .dsh-todo-strip__count{display:inline-flex;align-items:center;gap:4px;font:inherit;font-size:12px;color:var(--dsw-alias-label-secondary);background:transparent;border:0;padding:0;cursor:pointer;}
 .dsh-todo-strip__count:hover{color:var(--dsw-alias-label-primary);}
@@ -879,6 +924,11 @@ window.__ModuleLoader__.load({
     /** 随面板挂载的样式表；面板卸载时由 React 一并移除。 */
     function Stylesheet() {
       return h('style', { 'data-dsh-todo': '' }, CSS)
+    }
+
+    /** 轻量入口用的样式表（待办条 / hero 按钮）。 */
+    function CoreStyles() {
+      return h('style', { 'data-dsh-todo-core': '' }, CORE_CSS)
     }
 
     return {
@@ -916,6 +966,15 @@ window.__ModuleLoader__.load({
             return h(TodoPanel, { api, t, layout })
           }))
 
+          // New Session 行里的紧凑选项，和 workspace / preset 控件同一排。
+          const stopHero = ctx.slots.inject('conversation.hero.options', () => ctx.slots.register({
+            name: 'conversation.hero.options',
+            id: 'todo',
+            order: 0,
+          }, function TodoHeroOptionSlot() {
+            return h(TodoHeroOption, { api, t, layout })
+          }))
+
           // 输入框下方的待办条：start 页面与进行中的会话都能看到。
           const stopStrip = ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
             name: 'conversation.composer.dock',
@@ -926,6 +985,7 @@ window.__ModuleLoader__.load({
           }))
 
           return () => {
+            stopHero()
             stopStrip()
             stopPanel()
             stopIcon()
