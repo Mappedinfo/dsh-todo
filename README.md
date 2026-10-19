@@ -9,11 +9,11 @@ DeepSeek Harness 插件：在侧栏加一个**待办清单**面板，支持**列
 ## 安装
 
 ```sh
-# 从 GitHub 安装（当前可用）
-dsh plugin --profile <你的 profile> add github:Mappedinfo/dsh-todo
-
-# npm 包发布后
+# npm（推荐，支持版本解析与更新）
 dsh plugin --profile <你的 profile> add @mappedinfo/dsh-todo
+
+# 或直接从仓库装最新 main
+dsh plugin --profile <你的 profile> add github:Mappedinfo/dsh-todo
 ```
 
 也可以在 DSH 的插件页用 Add 填入同一个地址。`<你的 profile>` 是 profile 名（例如 `web`）；Electron 桌面版的 `desktop` profile 由应用自身管理。
