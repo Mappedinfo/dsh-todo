@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Todo Board",
+    "description": "Adds a global todo panel to the sidebar with list and Markdown views; new tasks automatically get a creation time, a reminder time and a reminder mode."
+  }
+}

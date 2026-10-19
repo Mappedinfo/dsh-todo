@@ -1,0 +1,20 @@
+# dsh-todo 的 Host 行。一条 insert 挂载整个插件：
+# 全局待办存储 + Web 面板（sidebar.panellist / main）+ 浏览器 RPC + agent 工具 + 提醒扫描。
+- insert:
+    - id: todo
+      name: '@mappedinfo/dsh-todo'
+      config:
+        # 状态文件；留空则用 ~/.dsh/dsh-todo/state.json
+        stateFile: null
+        # 新建待办自动使用的提醒模式：none | once | daily | lead
+        defaultReminderMode: once
+        # once / lead 模式下，默认提前多少分钟提醒（分钟）
+        defaultReminderDelayMinutes: 60
+        # daily 模式下，新待办的默认提醒时刻（本地 HH:mm）
+        defaultReminderTime: '09:00'
+        # 默认提醒时间向上取整到最近的分钟数（0 表示不取整）
+        reminderGranularityMinutes: 5
+        # lead 模式下，提前提醒的默认分钟数
+        defaultLeadMinutes: 10
+        # 提醒扫描间隔（秒）
+        reminderScanSeconds: 30

@@ -1,0 +1,67 @@
+{
+  "name": "@mappedinfo/dsh-todo",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness 待办清单插件：列表 / Markdown 双视图，新建时自动补齐创建时间、提醒时间与提醒模式。",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "todo",
+    "task",
+    "reminder",
+    "markdown"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mappedinfo/dsh-todo.git"
+  },
+  "homepage": "https://github.com/Mappedinfo/dsh-todo#readme",
+  "bugs": {
+    "url": "https://github.com/Mappedinfo/dsh-todo/issues"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "store.js",
+    "markdown.js",
+    "rpc.js",
+    "tools.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "scripts/*.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24",
+    "dsh": ">=0.1.5-rc.2"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-tools": "^0.2.1-rc.2"
+  },
+  "scripts": {
+    "test": "node scripts/smoke.mjs && node scripts/client-smoke.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  }
+}

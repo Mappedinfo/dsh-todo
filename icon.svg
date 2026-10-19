@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" role="img" aria-label="Todo board">
+  <rect x="9" y="6" width="40" height="52" rx="9" fill="#F4F6F8" stroke="#2F6FEB" stroke-width="2.5"/>
+  <rect x="9" y="6" width="10" height="52" rx="5" fill="#2F6FEB" opacity="0.16"/>
+  <path d="M22 20.5l3.4 3.4L31.5 18" stroke="#2F6FEB" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M22 32h20" stroke="#5A6472" stroke-width="3" stroke-linecap="round"/>
+  <path d="M22 41h12" stroke="#8C94A0" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="45" cy="45" r="13" fill="#2F6FEB" stroke="#FFFFFF" stroke-width="3"/>
+  <path d="M45 38.5V45l4.2 2.6" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
