@@ -92,7 +92,7 @@ check('factory 返回一个注入 slots/locale/connection 的插件', () => {
 // ── 桩 Client 上下文：记录注册与清理 ────────────────────────────────────
 const registrations = []
 let localeDict = null
-const disposed = { locale: false, icon: false, panel: false, strip: false, hero: false }
+const disposed = { locale: false, icon: false, panel: false, strip: false, hero: false, side: false, settings: false }
 
 const selectedPanels = []
 const effectDisposers = []
@@ -124,7 +124,9 @@ const ctx = {
       callback()
       const slot = name === 'main' ? 'panel'
         : name === 'sidebar.panellist' ? 'icon'
-          : name === 'conversation.hero.options' ? 'hero' : 'strip'
+          : name === 'conversation.hero.options' ? 'hero'
+            : name === 'sidebar.footer.action' ? 'side'
+              : name === 'settings.section' ? 'settings' : 'strip'
       return () => {
         disposed[slot] = true
         for (const entry of registrations.slice(from)) entry.dispose()
@@ -154,6 +156,8 @@ check('apply 在只有 require 的 bundle 环境里注册两个槽位', () => {
     'conversation.composer.dock:todo-strip',
     'conversation.hero.options:todo',
     'main:todo',
+    'settings.section:todo-surfaces',
+    'sidebar.footer.action:todo',
     'sidebar.panellist:todo',
   ])
 })
@@ -318,32 +322,14 @@ check('面板左上角的返回按钮会调用 selectPanel(null)', () => {
   assert.deepEqual(selectedPanels, [null], '应当请求回到对话（selectPanel(null)）')
 })
 
-check('输入框下方的待办条显示计数，点击打开面板', () => {
+check('输入框下方的待办条默认关闭（避免和 activity / 用量挤在一起）', () => {
   const strip = registrations.find((entry) => entry.options.name === 'conversation.composer.dock')
   assert.ok(strip !== undefined, '没有注册待办条')
   assert.equal(strip.options.id, 'todo-strip')
   hookState.clear()
   hookIndex = 0
-  hookState.set('s0', { total: 3, open: 2, today: 1, done: 1, due: 0 })
-  hookState.set('s1', [{ id: 'a1', title: '写周报', done: false }])
-  selectedPanels.length = 0
-  const nodes = collectNodes(renderNode(strip.component({})))
-  const texts = nodes.filter((node) => typeof node === 'string')
-  assert.ok(texts.includes('待办 2'), '没有渲染未完成计数')
-  assert.ok(texts.includes('今日 1'), '没有渲染今日计数')
-  assert.ok(texts.includes('写周报'), '没有渲染待办标题')
-  const open = nodes.find((node) => node && node.type === 'button' && node.props?.className === 'dsh-todo-strip__count')
-  open.props.onClick()
-  assert.deepEqual(selectedPanels, ['todo'], '应当切到 todo 面板')
-})
-
-check('清单为空时不渲染待办条', () => {
-  const strip = registrations.find((entry) => entry.options.name === 'conversation.composer.dock')
-  hookState.clear()
-  hookIndex = 0
-  hookState.set('s0', { total: 0, open: 0, today: 0, done: 0, due: 0 })
-  hookState.set('s1', [])
-  assert.equal(renderNode(strip.component({})), null)
+  hookState.set('s1', { total: 3, open: 2, today: 1, done: 1, due: 0 })
+  assert.equal(renderNode(strip.component({})), null, '默认不该渲染')
 })
 
 check('New Session 行的待办选项显示计数并打开面板', () => {
@@ -352,7 +338,8 @@ check('New Session 行的待办选项显示计数并打开面板', () => {
   assert.equal(hero.options.id, 'todo')
   hookState.clear()
   hookIndex = 0
-  hookState.set('s0', { total: 4, open: 3, today: 2, done: 1, due: 0 })
+  hookState.set('s0', { composerStrip: false, heroOption: true, sidebarAction: true })
+  hookState.set('s1', { total: 4, open: 3, today: 2, done: 1, due: 0 })
   selectedPanels.length = 0
   const nodes = collectNodes(renderNode(hero.component({})))
   const texts = nodes.filter((node) => typeof node === 'string')
@@ -363,10 +350,53 @@ check('New Session 行的待办选项显示计数并打开面板', () => {
   assert.deepEqual(selectedPanels, ['todo'])
 })
 
+check('侧栏底部入口显示计数并打开面板', () => {
+  const side = registrations.find((entry) => entry.options.name === 'sidebar.footer.action')
+  assert.ok(side !== undefined, '没有注册侧栏入口')
+  hookState.clear()
+  hookIndex = 0
+  hookState.set('s0', { composerStrip: false, heroOption: true, sidebarAction: true })
+  hookState.set('s1', { total: 3, open: 2, today: 1, done: 1, due: 0 })
+  selectedPanels.length = 0
+  const nodes = collectNodes(renderNode(side.component({ wide: true })))
+  const texts = nodes.filter((node) => typeof node === 'string')
+  assert.ok(texts.includes('待办 2'), '宽侧栏应显示计数')
+  nodes.find((node) => node && node.type === 'button').props.onClick()
+  assert.deepEqual(selectedPanels, ['todo'])
+})
+
+check('设置页的三个开关会写回 prefs.surfaces', () => {
+  const settings = registrations.find((entry) => entry.options.name === 'settings.section')
+  assert.ok(settings !== undefined, '没有注册设置页')
+  const calls = []
+  const original = ctx.connection.rpc.call
+  ctx.connection.rpc.call = async (channel, endpoint, payload) => {
+    calls.push({ channel, endpoint, payload })
+    return { ok: true, value: {} }
+  }
+  try {
+    hookState.clear()
+    hookIndex = 0
+    const nodes = collectNodes(renderNode(settings.component({})))
+    const switches = nodes.filter((node) => node && node.props?.role === 'switch')
+    assert.equal(switches.length, 3, '应当有三个开关')
+    assert.deepEqual(switches.map((node) => node.props['aria-checked']),
+      ['true', 'true', 'false'], '默认 开/开/关')
+    switches[2].props.onClick()
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].endpoint, 'set-prefs')
+    assert.equal(calls[0].payload.patch.surfaces.composerStrip, true)
+  } finally {
+    ctx.connection.rpc.call = original
+  }
+})
+
 check('卸载会清掉语言包与两个槽位注册', () => {
   assert.equal(effectDisposers.length, 1, 'apply 应当只开一个 effect')
   for (const dispose of effectDisposers) dispose()
-  assert.deepEqual(disposed, { locale: true, icon: true, panel: true, strip: true, hero: true })
+  assert.deepEqual(disposed, {
+    locale: true, icon: true, panel: true, strip: true, hero: true, side: true, settings: true,
+  })
   assert.equal(registrations.length, 0)
 })
 

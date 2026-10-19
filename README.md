@@ -38,9 +38,13 @@ dsh plugin --profile <你的 profile> add github:Mappedinfo/dsh-todo
 
 > 宿主的「Workspace files / New terminal / Browser」三个快捷操作是内置组件，不经槽位；插件能用的位置是 `conversation.hero.options`，也就是这一行里留给插件的座位。
 
-### 输入框下方的待办条
+### 侧栏底部入口
 
-对话或 start 页面的输入框下方会有一条待办摘要：未完成数、今日到期数，以及最近两项未完成条目。点一下打开完整面板。清单为空时不显示。
+侧栏底部、Settings 旁边会有一个待办入口，展开侧栏时显示未完成计数。不受会话影响，start 页面也可见。
+
+### 输入框下方的待办条（默认关闭）
+
+输入框下方可以显示一条待办摘要。**默认关闭**：那一行已经有 activity、用量和上下文指示器，再放一条在窄窗口里会非常拥挤。需要的话在设置里打开。
 
 ### 列表视图
 
@@ -133,6 +137,18 @@ node --check client.js          # 浏览器半边的语法
 ```
 
 `client-smoke.mjs` 会执行 bundle 的 `factory` 与 `apply`，断言两个槽位注册（`sidebar.panellist:todo` / `main:todo`）、zh/en 语言包、样式只用主题令牌、列表视图与 Markdown 预览 / 源码两种模式各自渲染出什么，以及卸载时全部清理干净。
+
+## 显示位置设置
+
+**Settings → 插件 → 待办清单** 可以分别开关三处入口，改动即时生效：
+
+| 开关 | 默认 | 位置 |
+| --- | --- | --- |
+| 新建会话行待办入口 | 开 | New Session 行右侧，workspace / preset 控件之后 |
+| 侧栏底部待办入口 | 开 | Settings 旁边，展开侧栏时显示计数 |
+| 输入框下方待办条 | **关** | 和 activity / 用量 / 上下文指示器同一行 |
+
+选择保存在 `prefs.surfaces`，跟着 `state.json` 一起持久化。
 
 ## 从源码开发
 

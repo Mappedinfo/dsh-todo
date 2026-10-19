@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.4
+
+- **输入框下方的待办条默认关闭**。它和 activity / 用量 / 上下文指示器共用一行，窄窗口和竖屏下非常拥挤。
+- **三处显示位置改为可在设置页分别开关**：Settings → 插件 → 待办清单。开关即时生效，保存到 `prefs.surfaces`。
+  - `heroOption`（默认开）：New Session 行右侧
+  - `sidebarAction`（默认开）：侧栏底部、Settings 旁边
+  - `composerStrip`（默认关）：输入框下方
+- 新增侧栏底部入口，展开侧栏时显示未完成计数。
+
 ## 0.1.3
 
 - **New Session 行加入待办入口**：注册 `conversation.hero.options`（官方留给插件放紧凑选项的位置，和 workspace / preset 控件同一排），显示 `待办 N · 今日 M`，点一下打开面板。宿主自带的「Workspace files / New terminal / Browser」是内置的、不走槽位，所以插件只能落在这个专门座位里。

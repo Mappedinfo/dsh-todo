@@ -77,6 +77,26 @@ function asTrimmedString(value, max = 400) {
   return typeof value === 'string' ? value.trim().slice(0, max) : ''
 }
 
+/**
+ * 待办在不同界面上的出现位置。用户可在设置页逐项开关。
+ * 输入框下方默认关闭：那里已经有 activity / usage / 上下文指示器，再塞一条会很挤。
+ */
+export const SURFACE_KEYS = ['composerStrip', 'heroOption', 'sidebarAction']
+
+export function defaultSurfaces() {
+  return { composerStrip: false, heroOption: true, sidebarAction: true }
+}
+
+export function normalizeSurfaces(raw) {
+  const source = raw !== null && typeof raw === 'object' ? raw : {}
+  const defaults = defaultSurfaces()
+  const next = {}
+  for (const key of SURFACE_KEYS) {
+    next[key] = typeof source[key] === 'boolean' ? source[key] : defaults[key]
+  }
+  return next
+}
+
 let idCounter = 0
 /** 会话内单调递增，避免依赖随机数带来的可读性问题。 */
 function newId(now) {
@@ -201,7 +221,11 @@ export class TodoStore {
       reminderGranularityMinutes: clampInteger(options.reminderGranularityMinutes, 0, 120, 5),
       leadMinutes: clampInteger(options.leadMinutes, 0, 7 * 24 * 60, 10),
     }
-    this.state = { version: STATE_VERSION, todos: [], prefs: { view: 'list', filter: 'all' } }
+    this.state = {
+      version: STATE_VERSION,
+      todos: [],
+      prefs: { view: 'list', filter: 'all', surfaces: defaultSurfaces() },
+    }
     this.writeTimer = null
     this.writing = Promise.resolve()
   }
@@ -229,6 +253,7 @@ export class TodoStore {
       prefs: {
         view: oneOf(prefs.view, ['list', 'markdown'], 'list'),
         filter: oneOf(prefs.filter, ['all', 'open', 'today', 'done'], 'all'),
+        surfaces: normalizeSurfaces(prefs.surfaces),
       },
     }
     return this.state
@@ -275,6 +300,9 @@ export class TodoStore {
     if (patch !== null && typeof patch === 'object') {
       if (patch.view !== undefined) this.state.prefs.view = oneOf(patch.view, ['list', 'markdown'], this.state.prefs.view)
       if (patch.filter !== undefined) this.state.prefs.filter = oneOf(patch.filter, ['all', 'open', 'today', 'done'], this.state.prefs.filter)
+      if (patch.surfaces !== undefined) {
+        this.state.prefs.surfaces = normalizeSurfaces({ ...this.state.prefs.surfaces, ...patch.surfaces })
+      }
     }
     this.schedule()
     return this.prefs()

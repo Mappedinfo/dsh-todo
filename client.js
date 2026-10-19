@@ -70,6 +70,15 @@ window.__ModuleLoader__.load({
       stripOpen: '待办 {open}',
       stripToday: '今日 {today}',
       stripDone: '已完成 {done}',
+      settingsTab: '待办清单',
+      settingsTitle: '待办清单显示位置',
+      settingsHint: '这三处可以分别开关，改动立即生效。默认只开「新建会话行」，避免输入框下方和底部状态挤在一起。',
+      surfaceComposer: '输入框下方显示待办条',
+      surfaceComposerHint: '和 activity / 用量 / 上下文指示器同一区域，竖屏或窄窗口时容易拥挤',
+      surfaceHero: '新建会话行显示待办入口',
+      surfaceHeroHint: 'New Session 那一行右侧，workspace 与 preset 控件之后',
+      surfaceSidebar: '侧栏底部显示待办入口',
+      surfaceSidebarHint: 'Settings 旁边，展开侧栏时显示计数',
     }
     const EN = {
       panel: 'Todo List',
@@ -125,6 +134,15 @@ window.__ModuleLoader__.load({
       stripOpen: '{open} open',
       stripToday: '{today} today',
       stripDone: '{done} done',
+      settingsTab: 'Todo board',
+      settingsTitle: 'Where the todo board appears',
+      settingsHint: 'Each surface can be toggled independently; changes apply immediately. Only the New Session row is on by default.',
+      surfaceComposer: 'Show a todo strip below the composer',
+      surfaceComposerHint: 'Shares the row with activity, usage and context meters; crowded in narrow windows',
+      surfaceHero: 'Show a todo entry in the New Session row',
+      surfaceHeroHint: 'Right side of the New Session row, after the workspace and preset controls',
+      surfaceSidebar: 'Show a todo entry at the sidebar foot',
+      surfaceSidebarHint: 'Beside Settings; shows the count when the sidebar is expanded',
     }
 
     // ── RPC ────────────────────────────────────────────────────────────────
@@ -146,6 +164,40 @@ window.__ModuleLoader__.load({
         setPrefs: (patch) => call('set-prefs', { patch }),
         sweep: () => call('sweep'),
       }
+    }
+
+    // ── 显示位置开关 ────────────────────────────────────────────────────────
+    // 设置页改了开关要让已经挂载的待办条/入口立即响应，用一个极小的订阅容器
+    // 比让每个组件各自轮询快照更省，也不会互相打架。
+    function createSurfaceStore() {
+      // 初值与 Host 的 defaultSurfaces() 保持一致：先按默认渲染，快照到达后再校正，
+      // 避免每个入口都要等一次 RPC 才决定显示与否。
+      let value = { composerStrip: false, heroOption: true, sidebarAction: true }
+      const listeners = new Set()
+      return {
+        get: () => value,
+        set(next) {
+          value = next
+          for (const listener of [...listeners]) listener()
+        },
+        subscribe(listener) {
+          listeners.add(listener)
+          return () => listeners.delete(listener)
+        },
+        apply(snapshot) {
+          const surfaces = snapshot?.prefs?.surfaces
+          if (surfaces !== undefined && surfaces !== null) this.set(surfaces)
+        },
+      }
+    }
+
+    function useSurfaces(surfaceStore) {
+      const [value, setValue] = useState(surfaceStore.get())
+      useEffect(() => {
+        setValue(surfaceStore.get())
+        return surfaceStore.subscribe(() => setValue(surfaceStore.get()))
+      }, [surfaceStore])
+      return value
     }
 
     // ── 最小 Markdown 渲染 ──────────────────────────────────────────────────
@@ -628,16 +680,20 @@ window.__ModuleLoader__.load({
      * 对话输入框下方的待办条：在 start 页面与任何会话里都能看到。
      * 只显示计数与最近两项，点一下打开完整面板。
      */
-    function TodoStrip({ api, t, layout }) {
+    function TodoStrip({ api, t, layout, surfaceStore }) {
+      const surfaces = useSurfaces(surfaceStore)
+      const enabled = surfaces?.composerStrip === true
       const [counts, setCounts] = useState(null)
       const [top, setTop] = useState([])
 
       useEffect(() => {
+        if (!enabled) return undefined
         let stopped = false
         const load = () => {
           api.snapshot()
             .then((next) => {
               if (stopped) return
+              surfaceStore.apply(next)
               setCounts(next.counts)
               setTop(next.todos.filter((todo) => !todo.done).slice(0, 2))
             })
@@ -649,9 +705,9 @@ window.__ModuleLoader__.load({
           stopped = true
           clearInterval(timer)
         }
-      }, [api])
+      }, [api, enabled, surfaceStore])
 
-      if (counts === null || counts.total === 0) return null
+      if (!enabled || counts === null || counts.total === 0) return null
 
       const open = () => {
         if (typeof layout?.selectPanel === 'function') layout.selectPanel('todo')
@@ -676,14 +732,21 @@ window.__ModuleLoader__.load({
      * New Session 行里的紧凑选项：和 Workspace files / New terminal / Browser 同一块区域。
      * 宿主自带的三个快捷操作是内置的，不走槽位；这里是官方留给插件的位置。
      */
-    function TodoHeroOption({ api, t, layout }) {
+    function TodoHeroOption({ api, t, layout, surfaceStore }) {
+      const surfaces = useSurfaces(surfaceStore)
+      const enabled = surfaces?.heroOption === true
       const [counts, setCounts] = useState(null)
 
       useEffect(() => {
+        if (!enabled) return undefined
         let stopped = false
         const load = () => {
           api.snapshot()
-            .then((next) => { if (!stopped) setCounts(next.counts) })
+            .then((next) => {
+              if (stopped) return
+              surfaceStore.apply(next)
+              setCounts(next.counts)
+            })
             .catch(() => undefined)
         }
         load()
@@ -692,9 +755,9 @@ window.__ModuleLoader__.load({
           stopped = true
           clearInterval(timer)
         }
-      }, [api])
+      }, [api, enabled, surfaceStore])
 
-      if (counts === null || counts.total === 0) return null
+      if (!enabled || counts === null || counts.total === 0) return null
       const open = () => {
         if (typeof layout?.selectPanel === 'function') layout.selectPanel('todo')
       }
@@ -710,6 +773,91 @@ window.__ModuleLoader__.load({
         h('span', {}, t('stripOpen', { open: counts.open })),
         counts.today > 0 ? h('span', { className: 'dsh-todo-strip__sep' }, '·') : null,
         counts.today > 0 ? h('span', { className: 'dsh-todo-strip__today' }, t('stripToday', { today: counts.today })) : null))
+    }
+
+    /** 侧栏底部入口：Settings 旁边，展开时显示计数，收起时只留图标。 */
+    function TodoSidebarAction({ api, t, layout, surfaceStore, wide }) {
+      const surfaces = useSurfaces(surfaceStore)
+      const enabled = surfaces?.sidebarAction === true
+      const [counts, setCounts] = useState(null)
+
+      useEffect(() => {
+        if (!enabled) return undefined
+        let stopped = false
+        const load = () => {
+          api.snapshot()
+            .then((next) => {
+              if (stopped) return
+              surfaceStore.apply(next)
+              setCounts(next.counts)
+            })
+            .catch(() => undefined)
+        }
+        load()
+        const timer = setInterval(load, 60_000)
+        return () => {
+          stopped = true
+          clearInterval(timer)
+        }
+      }, [api, enabled, surfaceStore])
+
+      if (!enabled || counts === null || counts.total === 0) return null
+      const open = () => {
+        if (typeof layout?.selectPanel === 'function') layout.selectPanel('todo')
+      }
+      return h(React.Fragment, null,
+        h(CoreStyles),
+        h('button', { type: 'button', className: 'dsh-todo-side', title: t('panel'), onClick: open },
+          h(TodoIcon, { size: 16 }),
+          wide ? h('span', { className: 'dsh-todo-side__label' }, t('stripOpen', { open: counts.open })) : null))
+    }
+
+    /** 设置页：把三处显示位置做成开关。 */
+    function TodoSettings({ api, t, surfaceStore }) {
+      const surfaces = useSurfaces(surfaceStore)
+      const [error, setError] = useState(null)
+      const [busy, setBusy] = useState(false)
+
+      useEffect(() => {
+        api.snapshot()
+          .then((next) => surfaceStore.apply(next))
+          .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
+      }, [api, surfaceStore])
+
+      const toggle = (key) => {
+        const next = { ...(surfaces ?? {}), [key]: !(surfaces?.[key] === true) }
+        setBusy(true)
+        api.setPrefs({ surfaces: next })
+          .then(() => {
+            surfaceStore.set(next)
+            setError(null)
+          })
+          .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
+          .finally(() => setBusy(false))
+      }
+
+      const row = (key, label, hint) => h('div', { className: 'dsh-todo-settings__row', key },
+        h('div', { className: 'dsh-todo-settings__text' },
+          h('div', { className: 'dsh-todo-settings__label' }, label),
+          h('div', { className: 'dsh-todo-settings__hint' }, hint)),
+        h('button', {
+          type: 'button',
+          role: 'switch',
+          'aria-checked': surfaces?.[key] === true ? 'true' : 'false',
+          'aria-label': label,
+          disabled: busy || surfaces === null,
+          className: `dsh-todo-settings__switch${surfaces?.[key] === true ? ' is-on' : ''}`,
+          onClick: () => toggle(key),
+        }, h('span', { className: 'dsh-todo-settings__knob' })))
+
+      return h('div', { className: 'dsh-todo-settings' },
+        h(CoreStyles),
+        h('div', { className: 'dsh-todo-settings__title' }, t('settingsTitle')),
+        h('div', { className: 'dsh-todo-settings__intro' }, t('settingsHint')),
+        error === null ? null : h('div', { className: 'dsh-todo__banner is-error' }, error),
+        row('heroOption', t('surfaceHero'), t('surfaceHeroHint')),
+        row('sidebarAction', t('surfaceSidebar'), t('surfaceSidebarHint')),
+        row('composerStrip', t('surfaceComposer'), t('surfaceComposerHint')))
     }
 
     // ── 面板 ────────────────────────────────────────────────────────────────
@@ -919,6 +1067,21 @@ window.__ModuleLoader__.load({
 .dsh-todo-strip__sep{opacity:.6;}
 .dsh-todo-strip__item{font:inherit;font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-secondary);background:transparent;border:1px solid var(--dsw-alias-border-l1);border-radius:999px;padding:1px 8px;cursor:pointer;}
 .dsh-todo-strip__item:hover{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l2);}
+.dsh-todo-side{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12px;color:var(--dsw-alias-label-secondary);background:transparent;border:0;border-radius:8px;padding:6px 8px;cursor:pointer;}
+.dsh-todo-side:hover{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-2);}
+.dsh-todo-side__label{white-space:nowrap;}
+.dsh-todo-settings{display:flex;flex-direction:column;gap:12px;padding:20px 24px;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-size:13px;line-height:1.55;}
+.dsh-todo-settings__title{font-size:15px;font-weight:600;}
+.dsh-todo-settings__intro{color:var(--dsw-alias-label-secondary);font-size:12px;max-width:60ch;}
+.dsh-todo-settings__row{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid var(--dsw-alias-border-l1);}
+.dsh-todo-settings__text{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.dsh-todo-settings__label{font-weight:500;}
+.dsh-todo-settings__hint{color:var(--dsw-alias-label-secondary);font-size:12px;}
+.dsh-todo-settings__switch{flex:none;width:36px;height:20px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2);padding:2px;cursor:pointer;display:inline-flex;align-items:center;}
+.dsh-todo-settings__switch.is-on{background:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary);}
+.dsh-todo-settings__switch:disabled{opacity:.5;cursor:not-allowed;}
+.dsh-todo-settings__knob{width:14px;height:14px;border-radius:50%;background:var(--dsw-alias-bg-base);display:block;}
+.dsh-todo-settings__switch.is-on .dsh-todo-settings__knob{transform:translateX(16px);}
 `
 
     /** 随面板挂载的样式表；面板卸载时由 React 一并移除。 */
@@ -944,6 +1107,7 @@ window.__ModuleLoader__.load({
           const api = createApi(ctx.connection.rpc, getLocale)
           // layout 是可选依赖：拿不到时按钮与跳转自动隐藏，插件其余部分照常工作。
           const layout = ctx.get?.('layout')
+          const surfaceStore = createSurfaceStore()
 
           // 样式表不通过任何 builtin 注入：插件 bundle 的 factory 只拿到 require，
           // `styles` 是动态 Client runner 的 builtin，在这里并不存在。
@@ -972,7 +1136,28 @@ window.__ModuleLoader__.load({
             id: 'todo',
             order: 0,
           }, function TodoHeroOptionSlot() {
-            return h(TodoHeroOption, { api, t, layout })
+            return h(TodoHeroOption, { api, t, layout, surfaceStore })
+          }))
+
+          // 侧栏底部入口，Settings 旁边；不受会话影响，start 页面也可见。
+          const stopSidebarAction = ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+            name: 'sidebar.footer.action',
+            id: 'todo',
+            order: 10,
+            label: () => t('panel'),
+          }, function TodoSidebarActionSlot(props) {
+            return h(TodoSidebarAction, { api, t, layout, surfaceStore, wide: props?.wide === true })
+          }))
+
+          // 设置页：Settings → 插件 → 待办清单。
+          const stopSettings = ctx.slots.inject('settings.section', () => ctx.slots.register({
+            name: 'settings.section',
+            id: 'todo-surfaces',
+            order: 30,
+            locale: NS,
+            label: () => t('settingsTab'),
+          }, function TodoSettingsSlot() {
+            return h(TodoSettings, { api, t, surfaceStore })
           }))
 
           // 输入框下方的待办条：start 页面与进行中的会话都能看到。
@@ -981,10 +1166,12 @@ window.__ModuleLoader__.load({
             id: 'todo-strip',
             order: 2,
           }, function TodoStripSlot() {
-            return h(TodoStrip, { api, t, layout })
+            return h(TodoStrip, { api, t, layout, surfaceStore })
           }))
 
           return () => {
+            stopSettings()
+            stopSidebarAction()
             stopHero()
             stopStrip()
             stopPanel()
