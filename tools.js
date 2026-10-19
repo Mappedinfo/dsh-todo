@@ -42,9 +42,9 @@ function reminderFrom(args) {
   return Object.keys(reminder).length === 0 ? undefined : reminder
 }
 
-/** 把共享操作注册到一个 root Agent 上。 */
-export function registerTodoTools(defineTool, api, agent) {
-  return agent.ctx.tools.register(defineTool({
+/** 构造 todo_board 工具定义；注册由调用方在插件自己的 ctx 上完成。 */
+export function createTodoTool(defineTool, api) {
+  return defineTool({
     name: 'todo_board',
     description: [
       '管理用户的全局待办清单（与 Web 面板同一份数据）。',
@@ -69,7 +69,7 @@ export function registerTodoTools(defineTool, api, agent) {
     },
     output: JSON_OUTPUT,
     async execute(args, exec) {
-      if (exec.agent !== agent || exec.signal.aborted) return plain({ ok: false, code: 'cancelled' })
+      if (exec.signal.aborted) return plain({ ok: false, code: 'cancelled' })
       try {
         switch (args.action) {
           case 'list':
@@ -130,5 +130,5 @@ export function registerTodoTools(defineTool, api, agent) {
       kind: args.action === 'list' || args.action === 'markdown' ? 'read' : 'other',
       ...(args.title === undefined ? {} : { rawInput: args.title }),
     }),
-  }))
+  })
 }

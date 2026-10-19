@@ -7,13 +7,13 @@
 import { parseMarkdown, renderMarkdown } from './markdown.js'
 import { registerTodoRpc } from './rpc.js'
 import { TodoStore, viewTodo } from './store.js'
-import { registerTodoTools } from './tools.js'
+import { createTodoTool } from './tools.js'
 
 export const name = 'dsh-todo'
 
 export const inject = [
   // connection / webServer 是 RPC 通道的两端：缺一不可，故走硬依赖。
-  'timer', 'agents', 'connection', 'webServer',
+  'timer', 'tools', 'connection', 'webServer',
 ]
 
 /**
@@ -58,33 +58,19 @@ export function apply(ctx, rawConfig = {}) {
     }
 
     let alive = true
-    const agentTools = new Map()
     let removeRpc = async () => {}
-    let stopCreated = () => {}
-    let stopDisposed = () => {}
+    let removeTools = () => {}
     let stopTimer = () => {}
-
-    const disposeAgent = (agent) => {
-      const dispose = agentTools.get(agent)
-      if (dispose === undefined) return
-      agentTools.delete(agent)
-      try {
-        dispose()
-      } catch (error) {
-        ctx.logger.warn(`dsh-todo: tool cleanup failed: ${String(error)}`)
-      }
-    }
 
     const cleanup = async () => {
       alive = false
-      for (const stop of [stopTimer, stopCreated, stopDisposed]) {
+      for (const stop of [stopTimer, removeTools]) {
         try {
           stop()
         } catch (error) {
           ctx.logger.warn(`dsh-todo: lifecycle cleanup failed: ${String(error)}`)
         }
       }
-      for (const agent of [...agentTools.keys()].reverse()) disposeAgent(agent)
       await removeRpc()
       await store.flush()
     }
@@ -94,35 +80,23 @@ export function apply(ctx, rawConfig = {}) {
 
       removeRpc = await registerTodoRpc(ctx, api)
 
-      // `defineTool` 来自 @deepseek-ai/dsh-tools。取不到（宿主不提供且依赖未安装）
-      // 或版本不匹配时只跳过工具，面板、RPC 与提醒扫描照常工作。
+      // 工具注册在插件自己的 ctx 上，对所有 Agent 可见。
+      // 不按 root Agent 挂载：插件热装时当前 session 的 Agent 已经存在，
+      // 不会再触发 agent/created，按 Agent 挂会静默丢掉工具。
       let defineTool = null
       try {
         ({ defineTool } = await import('@deepseek-ai/dsh-tools'))
       } catch {
         ctx.logger.warn('dsh-todo: @deepseek-ai/dsh-tools 不可解析，本次不注册 todo_board 工具（面板与 RPC 不受影响）')
       }
-
-      // 每个 root Agent 一份工具；注册挂在 agent.ctx 上，随 Agent 一起释放。
-      const mountTools = (agent) => {
-        if (!alive || defineTool === null || agentTools.has(agent)) return
-        if (!ctx.agents.roots().includes(agent)) return
-        let dispose
+      if (defineTool !== null) {
         try {
-          dispose = agent.ctx.effect(
-            () => registerTodoTools(defineTool, api, agent),
-            'dsh-todo: board tools',
-          )
+          removeTools = ctx.tools.register(createTodoTool(defineTool, api))
         } catch (error) {
-          // 工具定义与宿主注册表版本不兼容时，宁可没有工具也不要拖垮整个插件。
+          // 定义与宿主注册表不兼容时，宁可没有工具也不要拖垮整个插件。
           ctx.logger.warn(`dsh-todo: todo_board 注册失败，跳过：${String(error)}`)
-          return
         }
-        agentTools.set(agent, dispose)
       }
-      for (const agent of ctx.agents.roots()) mountTools(agent)
-      stopCreated = ctx.on('agent/created', ({ agent }) => mountTools(agent))
-      stopDisposed = ctx.on('agent/disposed', ({ agent }) => agentTools.delete(agent))
 
       const scanSeconds = Number.isFinite(rawConfig.reminderScanSeconds)
         ? Math.min(3600, Math.max(5, Math.round(rawConfig.reminderScanSeconds)))
